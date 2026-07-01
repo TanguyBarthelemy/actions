@@ -1,0 +1,232 @@
+name: 'Release an R Package'
+description: 'Automate R package release (merge main/dev, update DESCRIPTION, NEWS, tag, GitHub release)'
+inputs:
+  tag:
+    description: 'New release tag (e.g. v1.2.3)'
+    required: true
+  github_token:
+    description: 'Authorized secret GitHub Personal Access Token. Defaults to github.token'
+    required: false
+    default: ${{ github.token }}
+  main-branch:
+    description: 'Main branch name'
+    required: false
+    default: ''
+  dev-branch:
+    description: 'Development branch name (optional)'
+    required: false
+    default: ''
+  change-remotes:
+    description: 'Update the DESCRIPTION Remotes field with rjdverse packages'
+    required: false
+    default: 'false'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+      with:
+        ref: ${{ inputs.dev-branch || github.event.repository.default_branch }}
+        fetch-depth: 0
+        token: ${{ inputs.github_token }}
+
+    - name: Setup Maven
+      uses: s4u/setup-maven-action@v1.20.0
+      with:
+        checkout-enabled: false
+
+    - name: Configure Git
+      shell: bash
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+    - name: Install ubuntu deps
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install libcurl4-openssl-dev
+        sudo apt-get install -y libuv1-dev
+
+    - name: Install R
+      uses: r-lib/actions/setup-r@v2
+      with:
+        use-public-rspm: true
+
+    - name: Install R dependencies
+      shell: Rscript {0}
+      run: |
+        install.packages("pak")
+        pak::pak("TanguyBarthelemy/releaser")
+        install.packages(c("desc"), repos = "http://cran.us.r-project.org")
+
+    - name: Validate tag
+      id: set-tag
+      shell: Rscript {0}
+      env:
+        tag: ${{ inputs.tag }}
+      run: |
+        library("releaser")
+        library("desc")
+
+        current_version <- desc_get_version(file = ".")
+        possible_tags <- paste0("v", c(current_version, get_different_future_version(version_number = current_version)))
+
+        tag <- Sys.getenv("tag")
+        if (!startsWith(tag, "v")) tag <- paste0("v", tag)
+        if (!tag %in% possible_tags) stop("Invalid tag. Possible tags: ", toString(possible_tags))
+        new_version <- substr(x = tag, start = 2, stop = nchar(tag))
+
+        system(paste0("echo \"tag=", tag, "\" >> \"$GITHUB_OUTPUT\""))
+        system(paste0("echo \"version_number=", new_version, "\" >> \"$GITHUB_OUTPUT\""))
+
+    - name: Update DESCRIPTION
+      shell: Rscript {0}
+      env:
+        version_number: ${{ steps.set-tag.outputs.version_number }}
+      run: |
+        library("desc")
+        new_version <- Sys.getenv("version_number")
+        desc_set_version(version = new_version, file = ".")
+
+    - name: Prepare release
+      if: ${{ inputs.change-remotes == 'true' }}
+      shell: Rscript {0}
+      run: |
+        library("releaser")
+        set_release_remotes(".", enabled = FALSE)
+
+    - name: Check changelog using Heylogs latest version
+      shell: bash
+      run: mvn -U com.github.nbbrd.heylogs:heylogs-maven-plugin::check -D heylogs.inputFiles=NEWS.md
+
+    - name: Update NEWS Check changelog using Heylogs latest version
+      shell: bash
+      env:
+        version_number: ${{ steps.set-tag.outputs.version_number }}
+      run: mvn -U com.github.nbbrd.heylogs:heylogs-maven-plugin::release -D heylogs.inputFile=NEWS.md -D heylogs.ref=$version_number
+
+    - name: Commit release
+      shell: bash
+      env:
+        tag: ${{ steps.set-tag.outputs.tag }}
+        CO_AUTHOR_NAME: ${{ github.actor }}
+        CO_AUTHOR_EMAIL: ${{ github.actor }}@users.noreply.github.com
+      run: |
+        git add -A
+        git commit -m "New release $tag" -m "Co-authored-by: ${CO_AUTHOR_NAME} <${CO_AUTHOR_EMAIL}>"
+
+    - name: Merge dev branch into main (if applicable)
+      if: ${{ inputs.main-branch != '' && inputs.dev-branch != '' && inputs.main-branch != inputs.dev-branch }}
+      shell: bash
+      env:
+        MAIN_BRANCH: ${{ inputs.main-branch }}
+        DEV_BRANCH: ${{ inputs.dev-branch }}
+      run: |
+        echo "Merging $DEV_BRANCH → $MAIN_BRANCH"
+        git checkout "$MAIN_BRANCH"
+        git pull origin "$MAIN_BRANCH"
+        git merge --no-ff "$DEV_BRANCH" -m "🔀 Merge $DEV_BRANCH into $MAIN_BRANCH before release"
+
+    - name: Tag release
+      shell: bash
+      env:
+        tag: ${{ steps.set-tag.outputs.tag }}
+      run: |
+        git tag "$tag"
+
+    - name: Merge main back into dev (if applicable)
+      if: ${{ inputs.main-branch != '' && inputs.dev-branch != '' && inputs.main-branch != inputs.dev-branch }}
+      shell: bash
+      env:
+        MAIN_BRANCH: ${{ inputs.main-branch }}
+        DEV_BRANCH: ${{ inputs.dev-branch }}
+      run: |
+        echo "Merging $MAIN_BRANCH → $DEV_BRANCH"
+        git checkout "$DEV_BRANCH"
+        git pull origin "$DEV_BRANCH"
+        git merge --no-ff "$MAIN_BRANCH" -m "🔁 Merge $MAIN_BRANCH into $DEV_BRANCH after release"
+
+    - name: Bump dev version
+      shell: Rscript {0}
+      run: |
+        library("desc")
+        desc_bump_version(which = "dev", file = ".")
+
+    - name: Restore development remotes
+      if: ${{ inputs.change-remotes == 'true' }}
+      shell: Rscript {0}
+      run: |
+        library("releaser")
+        set_release_remotes(".", enabled = TRUE)
+
+    - name: Commit dev bump
+      shell: bash
+      env:
+        CO_AUTHOR_NAME: ${{ github.actor }}
+        CO_AUTHOR_EMAIL: ${{ github.actor }}@users.noreply.github.com
+      run: |
+        git add -A
+        git commit -m "🔖 Auto-bump develop version" -m "Co-authored-by: ${CO_AUTHOR_NAME} <${CO_AUTHOR_EMAIL}>"
+
+    - name: Push branches and tags
+      shell: bash
+      env:
+        MAIN_BRANCH: ${{ inputs.main-branch }}
+        DEV_BRANCH: ${{ inputs.dev-branch }}
+        tag: ${{ steps.set-tag.outputs.tag }}
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      run: |
+        if [ -z "$MAIN_BRANCH" ]; then
+          MAIN_BRANCH="$DEFAULT_BRANCH"
+          echo "⚙️ Using repository default branch: $MAIN_BRANCH"
+        fi
+
+        echo "🔄 Pushing branches and tag..."
+        echo "Main branch : $MAIN_BRANCH"
+        echo "Dev branch  : ${DEV_BRANCH:-none}"
+        echo "Tag         : $tag"
+
+        if [ -n "$DEV_BRANCH" ] && [ "$MAIN_BRANCH" != "$DEV_BRANCH" ]; then
+          git push --atomic origin "$MAIN_BRANCH" "$DEV_BRANCH" "$tag"
+        else
+          git push --atomic origin "$MAIN_BRANCH" "$tag"
+        fi
+
+    - name: Generate release body
+      id: create-body
+      shell: bash
+      env:
+        version_number: ${{ steps.set-tag.outputs.version_number }}
+      run: |
+        OUTPUT_FILE=$(mktemp)
+
+        mvn -U \
+          com.github.nbbrd.heylogs:heylogs-maven-plugin::extract \
+          -Dheylogs.inputFile=NEWS.md \
+          -Dheylogs.ref="$version_number" \
+          -Dheylogs.outputFile="$OUTPUT_FILE"
+
+        sed -i '1s/^## /## /' "$OUTPUT_FILE"
+
+        {
+          echo "body<<EOF"
+          cat "$OUTPUT_FILE"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
+
+        rm -f "$OUTPUT_FILE"
+
+    - name: Check release body
+      id: check-body
+      shell: bash
+      run: echo "${{ steps.create-body.outputs.body }}"
+
+    - name: Publish GitHub release (draft)
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ steps.set-tag.outputs.tag }}
+        body: ${{ steps.create-body.outputs.body }}
+        draft: true
+        token: ${{ inputs.github_token }}

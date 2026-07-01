@@ -1,0 +1,101 @@
+name: 'Update Java Dependencies'
+description: 'Met à jour les dépendances Java et les JARs'
+inputs:
+  update_type:
+    description: 'Type de mise à jour (release ou snapshot)'
+    required: true
+    default: 'release'
+    type: string
+  branch:
+    description: 'Branche sur laquelle appliquer les changements'
+    required: false
+    default: 'develop'
+    type: string
+  java_version:
+    description: 'Version de Java à utiliser'
+    required: false
+    default: '21'
+    type: string
+
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout repository
+      uses: actions/checkout@v7
+      with:
+        ref: ${{ inputs.branch }}
+        fetch-depth: 0
+
+    - name: Set up Java
+      uses: actions/setup-java@v5
+      with:
+        distribution: 'temurin'
+        java-version: ${{ inputs.java_version }}
+
+    - uses: s4u/setup-maven-action@v1.20.0
+      with:
+        checkout-enabled: false
+
+    - name: Configure Git
+      shell: bash
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+    - name: Ensure correct branch
+      shell: bash
+      run: |
+        [ "${{ github.ref_name }}" = "${{ inputs.branch }}" ] || {
+          echo "This workflow can only run on ${{ inputs.branch }}"
+          exit 1
+        }
+
+    - name: Update release dependencies
+      if: inputs.update_type == 'release'
+      shell: bash
+      run: mvn versions:update-properties -DallowDowngrade
+
+    - name: Update snapshot dependencies
+      if: inputs.update_type == 'snapshot'
+      shell: bash
+      run: mvn versions:update-properties -DallowSnapshots -DallowDowngrade
+
+    - name: Copy jars
+      shell: bash
+      run: mvn -Pcopy-jars
+
+    - name: Extract jdplus-main version
+      if: inputs.update_type == 'release'
+      id: jdplus
+      shell: bash
+      run: |
+        VERSION=$(mvn help:evaluate -Dexpression=jdplus-main.version -q -DforceStdout)
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+    - name: Update NEWS.md
+      if: inputs.update_type == 'release'
+      shell: bash
+      env:
+        JDPLUS_VERSION: ${{ steps.jdplus.outputs.version }}
+      run: |
+        mvn -U \
+          com.github.nbbrd.heylogs:heylogs-maven-plugin::add \
+          -Dheylogs.inputFile=NEWS.md \
+          -Dheylogs.type=changed \
+          -Dheylogs.message="Updated JARS from jdplus-main to [${JDPLUS_VERSION}](https://github.com/jdemetra/jdplus-main/releases/tag/v${JDPLUS_VERSION})"
+
+    - name: Commit changes
+      shell: bash
+      run: |
+        git add -A
+        if git diff --cached --quiet; then
+          echo "No change detected"
+          exit 0
+        fi
+        git commit \
+          -m "Update Java dependencies (${{ inputs.update_type }})" \
+          -m "Co-authored-by: ${{ github.actor }} <${{ github.actor }}@users.noreply.github.com>"
+
+    - name: Push changes
+      shell: bash
+      run: git push origin ${{ inputs.branch }}
