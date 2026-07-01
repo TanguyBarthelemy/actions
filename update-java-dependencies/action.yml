@@ -11,11 +11,6 @@ inputs:
     required: false
     default: 'develop'
     type: string
-  java_version:
-    description: 'Version de Java à utiliser'
-    required: false
-    default: '21'
-    type: string
 
 runs:
   using: "composite"
@@ -30,7 +25,7 @@ runs:
       uses: actions/setup-java@v5
       with:
         distribution: 'temurin'
-        java-version: ${{ inputs.java_version }}
+        java-version: '21'
 
     - uses: s4u/setup-maven-action@v1.20.0
       with:
