@@ -106,7 +106,24 @@ runs:
       shell: bash
       run: mvn -U com.github.nbbrd.heylogs:heylogs-maven-plugin::check -D heylogs.inputFiles=NEWS.md
 
-    - name: Update NEWS Check changelog using Heylogs latest version
+    - name: Check if version already exists in NEWS.md
+      id: check-version-in-news
+      shell: bash
+      env:
+        version_number: ${{ steps.set-tag.outputs.version_number }}
+      run: |
+        LATEST_VERSION=$(grep -E '^## \[[0-9]+\.[0-9]+\.[0-9]+\]' NEWS.md | head -1 | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+')
+
+        if [ -n "$LATEST_VERSION" ] && [ "$version_number" = "$LATEST_VERSION" ]; then
+          echo "Version $version_number already exists in NEWS.md"
+          echo "exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "Version $version_number does not exist in NEWS.md"
+          echo "exists=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Update NEWS with Heylogs
+      if: steps.check-version-in-news.outputs.exists == 'false'
       shell: bash
       env:
         version_number: ${{ steps.set-tag.outputs.version_number }}
@@ -229,7 +246,7 @@ runs:
       run: echo "${{ steps.create-body.outputs.body }}"
 
     - name: Publish GitHub release (draft)
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@v3
       with:
         tag_name: ${{ steps.set-tag.outputs.tag }}
         body: ${{ steps.create-body.outputs.body }}
