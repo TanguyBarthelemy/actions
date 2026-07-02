@@ -137,7 +137,11 @@ runs:
         CO_AUTHOR_EMAIL: ${{ github.actor }}@users.noreply.github.com
       run: |
         git add -A
-        git commit -m "New release $tag" -m "Co-authored-by: ${CO_AUTHOR_NAME} <${CO_AUTHOR_EMAIL}>"
+        if ! git diff --cached --quiet; then
+          git commit -m "New release $tag" -m "Co-authored-by: ${CO_AUTHOR_NAME} <${CO_AUTHOR_EMAIL}>"
+        else
+          echo "No changes to commit, skipping."
+        fi
 
     - name: Merge dev branch into main (if applicable)
       if: ${{ inputs.main-branch != '' && inputs.dev-branch != '' && inputs.main-branch != inputs.dev-branch }}
