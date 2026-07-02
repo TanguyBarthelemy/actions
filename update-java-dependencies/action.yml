@@ -74,7 +74,7 @@ runs:
         JDPLUS_VERSION: ${{ steps.jdplus.outputs.version }}
       run: |
         mvn -U \
-          com.github.nbbrd.heylogs:heylogs-maven-plugin::add \
+          com.github.nbbrd.heylogs:heylogs-maven-plugin::push \
           -Dheylogs.inputFile=NEWS.md \
           -Dheylogs.type=changed \
           -Dheylogs.message="Updated JARS from jdplus-main to [${JDPLUS_VERSION}](https://github.com/jdemetra/jdplus-main/releases/tag/v${JDPLUS_VERSION})"

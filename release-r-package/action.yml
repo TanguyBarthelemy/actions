@@ -1,25 +1,30 @@
-name: 'Release an R Package'
-description: 'Automate R package release (merge main/dev, update DESCRIPTION, NEWS, tag, GitHub release)'
+name: "Release an R Package"
+description: "Automate R package release (merge main/dev, update DESCRIPTION, NEWS, tag, GitHub release)"
+author: "Tanguy Barthelemy"
+
 inputs:
   tag:
-    description: 'New release tag (e.g. v1.2.3)'
+    description: "New release tag (e.g. v1.2.3)"
     required: true
   github_token:
-    description: 'Authorized secret GitHub Personal Access Token. Defaults to github.token'
+    description: "Authorized secret GitHub Personal Access Token. Defaults to github.token"
     required: false
     default: ${{ github.token }}
   main-branch:
-    description: 'Main branch name'
+    description: "Main branch name"
     required: false
     default: ''
   dev-branch:
-    description: 'Development branch name (optional)'
+    description: "Development branch name (optional)"
     required: false
     default: ''
   change-remotes:
-    description: 'Update the DESCRIPTION Remotes field with rjdverse packages'
+    description: "Update the DESCRIPTION Remotes field with rjdverse packages"
     required: false
-    default: 'false'
+    default: "false"
+
+env:
+  MAVEN_ARGS: "-B -ntp"
 
 runs:
   using: "composite"
