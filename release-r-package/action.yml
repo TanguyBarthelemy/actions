@@ -94,12 +94,12 @@ runs:
         new_version <- Sys.getenv("version_number")
         desc_set_version(version = new_version, file = ".")
 
-    - name: Prepare release
+    - name: Prepare Remote field for release
       if: ${{ inputs.change-remotes == 'true' }}
       shell: Rscript {0}
       run: |
         library("releaser")
-        set_release_remotes(".", enabled = FALSE)
+        set_rjdverse_remotes(".", enabled = FALSE)
 
     - name: Check changelog using Heylogs latest version
       shell: bash
@@ -184,7 +184,7 @@ runs:
       shell: Rscript {0}
       run: |
         library("releaser")
-        set_release_remotes(".", enabled = TRUE)
+        set_rjdverse_remotes(".", enabled = TRUE)
 
     - name: Commit dev bump
       shell: bash
