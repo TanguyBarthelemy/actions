@@ -37,14 +37,6 @@ runs:
         git config --global user.name "github-actions[bot]"
         git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-    - name: Ensure correct branch
-      shell: bash
-      run: |
-        [ "${{ github.ref_name }}" = "${{ inputs.branch }}" ] || {
-          echo "This workflow can only run on ${{ inputs.branch }}"
-          exit 1
-        }
-
     - name: Update release dependencies
       if: inputs.update_type == 'release'
       shell: bash
@@ -59,25 +51,37 @@ runs:
       shell: bash
       run: mvn -Pcopy-jars
 
-    - name: Extract jdplus-main version
+    - name: Get updated dependencies
       if: inputs.update_type == 'release'
-      id: jdplus
+      id: get-updated-deps
       shell: bash
       run: |
-        VERSION=$(mvn help:evaluate -Dexpression=jdplus-main.version -q -DforceStdout)
-        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        MVN_OUTPUT=$(mvn versions:update-properties -DallowDowngrade)
 
-    - name: Update NEWS.md
+        # Générer le message
+        UPDATED_DEPS=$(echo "$MVN_OUTPUT" | sed -n 's/.*Updated ${\([^}]*\)\.version} from \([^ ]*\) to \([^ ]*\).*/Updated \1 JARS from \2 to \3/p')
+
+        echo "Updated dependencies:"
+        echo "$UPDATED_DEPS"
+        echo "updated_deps=$UPDATED_DEPS" >> $GITHUB_OUTPUT
+
+    - name: Update NEWS.md with all dependencies
       if: inputs.update_type == 'release'
       shell: bash
       env:
-        JDPLUS_VERSION: ${{ steps.jdplus.outputs.version }}
+        UPDATED_DEPS: ${{ steps.get-updated-deps.outputs.updated_deps }}
       run: |
-        mvn -U \
-          com.github.nbbrd.heylogs:heylogs-maven-plugin::push \
-          -Dheylogs.inputFile=NEWS.md \
-          -Dheylogs.type=changed \
-          -Dheylogs.message="Updated JARS from jdplus-main to [${JDPLUS_VERSION}](https://github.com/jdemetra/jdplus-main/releases/tag/v${JDPLUS_VERSION})"
+        if [ -z "$UPDATED_DEPS" ]; then
+          echo "No updates detected."
+        else
+          # Call heylogs for each updates
+          echo "$UPDATED_DEPS" | while IFS= read -r line; do
+            mvn -U com.github.nbbrd.heylogs:heylogs-maven-plugin::push \
+              -Dheylogs.inputFile=NEWS.md \
+              -Dheylogs.type=changed \
+              -Dheylogs.message="$line"
+          done
+        fi
 
     - name: Commit changes
       shell: bash
