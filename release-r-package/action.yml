@@ -62,7 +62,7 @@ runs:
     - name: Install R dependencies
       shell: Rscript {0}
       run: |
-        install.packages(c("desc", "pak"), repos = "http://cran.us.r-project.org")
+        install.packages(c("desc", "pak"), repos = "https://cloud.r-project.org")
         pak::pak("TanguyBarthelemy/releaser")
 
     - name: Validate tag
