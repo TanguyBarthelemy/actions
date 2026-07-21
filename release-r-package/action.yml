@@ -98,8 +98,8 @@ runs:
       if: ${{ inputs.change-remotes == 'true' }}
       shell: Rscript {0}
       run: |
-        library("releaser")
-        set_rjdverse_remotes(".", enabled = FALSE)
+        library("desc")
+        desc_del_remotes(file = ".")
 
     - name: Check changelog using Heylogs latest version
       shell: bash
@@ -184,7 +184,7 @@ runs:
       shell: Rscript {0}
       run: |
         library("releaser")
-        set_rjdverse_remotes(".", enabled = TRUE)
+        set_rjdverse_remotes(".")
 
     - name: Commit dev bump
       shell: bash
