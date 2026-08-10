@@ -99,7 +99,7 @@ runs:
       shell: Rscript {0}
       run: |
         library("desc")
-        desc_del_remotes(file = ".")
+        desc_del_remotes(file = ".", pattern = "rjd3")
 
     - name: Check changelog using Heylogs latest version
       shell: bash
