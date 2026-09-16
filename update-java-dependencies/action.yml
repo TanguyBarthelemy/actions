@@ -44,8 +44,48 @@ runs:
       run: |
         MVN_OUTPUT=$(mvn versions:update-properties -DallowDowngrade)
 
-        # Générer le message
-        UPDATED_DEPS=$(echo "$MVN_OUTPUT" | sed -n 's/.*Updated ${\([^}]*\)\.version} from \([^ ]*\) to \([^ ]*\).*/Updated \1 JARS from \2 to \3/p')
+        # Dictionnaire des liens GitHub
+        declare -A GITHUB_URLS=(
+          ["protobuf"]="https://github.com/protocolbuffers/protobuf/releases/tag/v"
+          ["jdplus-main"]="https://github.com/jdemetra/jdplus-main/releases/tag/v"
+          ["jdplus-benchmarking"]="https://github.com/jdemetra/jdplus-benchmarking/releases/tag/v"
+          ["jdplus-incubator"]="https://github.com/jdemetra/jdplus-incubator/releases/tag/v"
+          ["jdplus-nowcasting"]="https://github.com/jdemetra/jdplus-nowcasting/releases/tag/v"
+          ["jdplus-experimental"]="https://github.com/jdemetra/jdplus-experimental/releases/tag/v"
+          ["jdplus-revisions"]="https://github.com/jdemetra/jdplus-revisions/releases/tag/v"
+          ["jdplus-examples"]="https://github.com/jdemetra/jdplus-examples/releases/tag/v"
+          ["jdplus-eurostat"]="https://github.com/jdemetra/jdplus-eurostat/releases/tag/v"
+          ["spreadsheet4j"]="https://github.com/nbbrd/spreadsheet4j/releases/tag/v"
+        )
+
+        # Initialiser UPDATED_DEPS
+        UPDATED_DEPS=""
+
+        # Générer les messages avec liens
+        while IFS= read -r line; do
+          if [[ "$line" == *"Updated"* ]]; then
+            dep=$(echo "$line" | sed -E 's/.*Updated \$\{([^.]+)\.version\} from .*/\1/')
+            echo "$dep"
+            old_version=$(echo "$line" | awk '{print $(NF-2)}')
+            new_version=$(echo "$line" | awk '{print $NF}')
+
+            # Vérifier si la dépendance existe dans le dictionnaire
+            if [[ -n "${GITHUB_URLS[$dep]}" ]]; then
+              url_version="$new_version"
+              if [[ "$dep" == "protobuf" ]]; then
+                url_version=${new_version#4.}
+              fi
+              url="${GITHUB_URLS[$dep]}$url_version"
+              UPDATED_DEPS+="Updated $dep JARS from $old_version to [$new_version]($url)"$'\n'
+            else
+              UPDATED_DEPS+="Updated $dep JARS from $old_version to $new_version"$'\n'
+            fi
+
+          fi
+        done <<< "$MVN_OUTPUT"
+
+        # Supprimer le dernier saut de ligne
+        UPDATED_DEPS=${UPDATED_DEPS%$'\n'}
 
         echo "Updated dependencies:"
         echo "$UPDATED_DEPS"
