@@ -62,8 +62,7 @@ runs:
     - name: Install R dependencies
       shell: Rscript {0}
       run: |
-        install.packages(c("desc", "pak"), repos = "https://cloud.r-project.org")
-        pak::pak("TanguyBarthelemy/releaser")
+        install.packages(c("desc", "releaser"), repos = "https://cloud.r-project.org")
 
     - name: Validate tag
       id: set-tag
