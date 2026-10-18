@@ -245,7 +245,10 @@ runs:
     - name: Check release body
       id: check-body
       shell: bash
-      run: printf '%s\n' "${{ steps.create-body.outputs.body }}"
+      env:
+        RELEASE_BODY: ${{ steps.create-body.outputs.body }}
+      run: |
+        printf '%s\n' "$RELEASE_BODY"
 
     - name: Publish GitHub release (draft)
       uses: softprops/action-gh-release@v3
